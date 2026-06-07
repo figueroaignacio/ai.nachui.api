@@ -106,7 +106,11 @@ async def github_callback(
     db: AsyncSession = Depends(get_db),
 ) -> AccessTokenResponse:
 
-    if oauth_state is None or not _verify_signed_state(oauth_state, state):
+    if oauth_state is None:
+        print("DEBUG: oauth_state cookie is None!")
+        raise OAuthStateException()
+    if not _verify_signed_state(oauth_state, state):
+        print("DEBUG: _verify_signed_state failed!")
         raise OAuthStateException()
 
     response.delete_cookie(_STATE_COOKIE)
@@ -116,6 +120,7 @@ async def github_callback(
     except ValueError as exc:
         raise OAuthCallbackException(detail=str(exc)) from exc
     except Exception as exc:
+        print(f"DEBUG: Exception during callback: {repr(exc)}")
         raise OAuthCallbackException(
             detail="Unexpected error during GitHub OAuth callback"
         ) from exc
