@@ -1,10 +1,3 @@
-"""
-app/users/service.py
-─────────────────────
-Data-access layer for the users feature module.
-All DB operations are async; no sync calls.
-"""
-
 import uuid
 
 from sqlalchemy import select
@@ -50,11 +43,10 @@ async def get_or_create_user(
     """
     user = await get_user_by_github_id(db, github_id)
 
-    # Fallback: match by email to link accounts
     if user is None and email:
         user = await get_user_by_email(db, email)
         if user is not None:
-            user.github_id = github_id  # attach GitHub identity
+            user.github_id = github_id
 
     if user is None:
         user = User(
@@ -64,9 +56,8 @@ async def get_or_create_user(
             avatar_url=avatar_url,
         )
         db.add(user)
-        await db.flush()  # assigns user.id without committing
+        await db.flush()
     else:
-        # Keep profile in sync with GitHub
         user.github_username = github_username
         user.avatar_url = avatar_url
         if email:

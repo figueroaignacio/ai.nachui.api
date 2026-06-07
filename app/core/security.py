@@ -1,28 +1,18 @@
-"""
-app/core/security.py
-─────────────────────
-JWT creation / decoding (RS256) and HttpOnly cookie helpers.
-Never imports from feature modules – only from core.config.
-"""
-
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+from jose import jwt
 from starlette.responses import Response
 
 from app.core.config import get_settings
 
 settings = get_settings()
 
-# ── Constants ─────────────────────────────────────────────────────────────────
 
-ALGORITHM = settings.jwt_algorithm  # "RS256"
+ALGORITHM = settings.jwt_algorithm
 REFRESH_COOKIE_NAME = "refresh_token"
-REFRESH_COOKIE_PATH = "/auth"  # covers /auth/refresh and /auth/logout
+REFRESH_COOKIE_PATH = "/auth"
 
-
-# ── Access token ──────────────────────────────────────────────────────────────
 
 def create_access_token(user_id: uuid.UUID) -> tuple[str, str, datetime]:
     """
@@ -56,8 +46,6 @@ def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
 
 
-# ── Refresh token ─────────────────────────────────────────────────────────────
-
 def create_refresh_token(user_id: uuid.UUID) -> tuple[str, str, datetime]:
     """
     Create a long-lived RS256 refresh JWT.
@@ -88,8 +76,6 @@ def decode_refresh_token(token: str) -> dict:
     """
     return jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
 
-
-# ── Cookie helpers ────────────────────────────────────────────────────────────
 
 def set_refresh_cookie(response: Response, token: str) -> None:
     """Attach the refresh token as an HttpOnly, Secure, SameSite=Lax cookie."""

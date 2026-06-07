@@ -1,13 +1,7 @@
-"""
-app/users/schemas.py
-─────────────────────
-Pydantic v2 schemas for the users feature module.
-"""
-
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict
 
 
 class UserRead(BaseModel):

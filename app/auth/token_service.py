@@ -1,11 +1,3 @@
-"""
-app/auth/token_service.py
-──────────────────────────
-Data-access layer for RefreshToken records.
-Handles storage, lookup, validation, and revocation.
-All operations are async; no sync DB calls.
-"""
-
 import uuid
 from datetime import datetime, timezone
 
@@ -38,9 +30,7 @@ async def store_refresh_token(
 
 async def get_token_by_jti(db: AsyncSession, jti: str) -> RefreshToken | None:
     """Return the RefreshToken row matching *jti*, or None."""
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.jti == jti)
-    )
+    result = await db.execute(select(RefreshToken).where(RefreshToken.jti == jti))
     return result.scalar_one_or_none()
 
 
@@ -56,7 +46,7 @@ async def is_token_valid(db: AsyncSession, jti: str) -> bool:
         return False
     now = datetime.now(tz=timezone.utc)
     expires = token.expires_at
-    # Make expires_at timezone-aware if stored as naive UTC
+
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
     return expires > now

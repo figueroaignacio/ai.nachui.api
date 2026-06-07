@@ -1,12 +1,3 @@
-"""
-app/auth/schemas.py
-────────────────────
-Pydantic v2 schemas scoped to the auth feature module.
-"""
-
-import uuid
-from datetime import datetime
-
 from pydantic import BaseModel
 
 
@@ -15,13 +6,13 @@ class AccessTokenResponse(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
-    expires_in: int  # seconds until the access token expires
+    expires_in: int
 
 
 class TokenPayload(BaseModel):
     """Claims decoded from a valid access JWT."""
 
-    sub: str   # str(user_id UUID)
+    sub: str
     jti: str
     exp: int
     type: str = "access"
@@ -30,7 +21,7 @@ class TokenPayload(BaseModel):
 class RefreshTokenPayload(BaseModel):
     """Claims decoded from a valid refresh JWT."""
 
-    sub: str   # str(user_id UUID)
+    sub: str
     jti: str
     exp: int
     type: str = "refresh"
@@ -39,7 +30,7 @@ class RefreshTokenPayload(BaseModel):
 class GitHubUserInfo(BaseModel):
     """Subset of fields returned by the GitHub /user API."""
 
-    id: int             # GitHub's numeric user id
-    login: str          # GitHub username / handle
+    id: int
+    login: str
     email: str | None = None
     avatar_url: str | None = None

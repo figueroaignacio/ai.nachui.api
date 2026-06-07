@@ -1,11 +1,6 @@
-"""
-app/users/models.py
-────────────────────
-User ORM model. Imports Base from core.database.
-"""
-
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -13,7 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.auth.models import RefreshToken
 
@@ -38,7 +32,6 @@ class User(Base):
         nullable=False,
     )
 
-    # Back-reference populated by RefreshToken.user relationship
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "app.auth.models.RefreshToken",
         back_populates="user",
@@ -46,5 +39,5 @@ class User(Base):
         lazy="select",
     )
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
         return f"<User id={self.id} github_username={self.github_username!r}>"

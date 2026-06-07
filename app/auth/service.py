@@ -1,14 +1,3 @@
-"""
-app/auth/service.py
-────────────────────
-Orchestration layer for the GitHub OAuth flow and token issuance.
-Calls out to:
-  - GitHub's OAuth token and user APIs (via httpx)
-  - users.service  – get_or_create_user
-  - auth.token_service – store_refresh_token
-  - core.security  – create_access_token / create_refresh_token / set_refresh_cookie
-"""
-
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
@@ -25,15 +14,12 @@ from app.users.service import get_or_create_user
 
 settings = get_settings()
 
-# ── GitHub API constants ──────────────────────────────────────────────────────
 
 _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 _GITHUB_USER_URL = "https://api.github.com/user"
 _GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
-_REQUEST_TIMEOUT = 10  # seconds
+_REQUEST_TIMEOUT = 10
 
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
 
 async def _exchange_code(code: str) -> str:
     """
@@ -84,7 +70,6 @@ async def _fetch_github_user(github_token: str) -> GitHubUserInfo:
 
         email: str | None = user_data.get("email")
 
-        # If the primary email is private, fetch from the emails endpoint
         if not email:
             emails_resp = await client.get(
                 _GITHUB_EMAILS_URL, headers=headers, timeout=_REQUEST_TIMEOUT
@@ -103,8 +88,6 @@ async def _fetch_github_user(github_token: str) -> GitHubUserInfo:
     )
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
-
 async def handle_github_callback(
     code: str,
     db: AsyncSession,
@@ -121,11 +104,10 @@ async def handle_github_callback(
       6. Attach the refresh token as an HttpOnly cookie on *response*.
       7. Return the access token in the response body.
     """
-    # 1 & 2 – GitHub API
+
     github_token = await _exchange_code(code)
     github_user = await _fetch_github_user(github_token)
 
-    # 3 – DB upsert
     user = await get_or_create_user(
         db=db,
         github_id=str(github_user.id),
@@ -134,16 +116,12 @@ async def handle_github_callback(
         avatar_url=github_user.avatar_url,
     )
 
-    # 4 – Issue tokens
     access_token, _at_jti, _at_exp = create_access_token(user.id)
     refresh_token, rt_jti, rt_exp = create_refresh_token(user.id)
 
-    # 5 – Persist refresh token
     await store_refresh_token(db, user.id, rt_jti, rt_exp)
 
-    # 6 – HttpOnly cookie
     set_refresh_cookie(response, refresh_token)
 
-    # 7 – Return access token
     expires_in = settings.access_token_expire_minutes * 60
     return AccessTokenResponse(access_token=access_token, expires_in=expires_in)

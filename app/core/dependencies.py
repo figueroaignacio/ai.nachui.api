@@ -1,9 +1,3 @@
-"""
-app/core/dependencies.py
-─────────────────────────
-Shared FastAPI dependencies injected into routes across feature modules.
-"""
-
 import uuid
 
 from fastapi import Depends
@@ -32,7 +26,7 @@ async def get_current_user(
     so that users/ does not depend on core/ at import time while core/
     depends on users/.
     """
-    from app.users.service import get_user_by_id  # deferred to avoid circular import
+    from app.users.service import get_user_by_id
 
     if credentials is None:
         raise CredentialsException("Authorization header missing")

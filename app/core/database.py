@@ -1,10 +1,3 @@
-"""
-app/core/database.py
-─────────────────────
-Async SQLAlchemy engine, session factory, declarative Base, and get_db dependency.
-All models must import Base from here and register themselves before create_all.
-"""
-
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -18,7 +11,6 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-# ── Engine ────────────────────────────────────────────────────────────────────
 
 engine = create_async_engine(
     settings.database_url,
@@ -28,7 +20,6 @@ engine = create_async_engine(
     max_overflow=20,
 )
 
-# ── Session factory ───────────────────────────────────────────────────────────
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -39,13 +30,9 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-# ── Declarative Base ──────────────────────────────────────────────────────────
-
 class Base(DeclarativeBase):
     """All ORM models inherit from this shared Base."""
 
-
-# ── FastAPI dependency ────────────────────────────────────────────────────────
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """

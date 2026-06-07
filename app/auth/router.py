@@ -1,22 +1,4 @@
-"""
-app/auth/router.py
-───────────────────
-All authentication endpoints:
-
-  GET  /auth/github            → initiate GitHub OAuth (redirect)
-  GET  /auth/github/callback   → OAuth callback handler
-  POST /auth/refresh           → rotate refresh token, issue new access token
-  POST /auth/logout            → revoke refresh token, clear cookie
-  GET  /auth/me                → return current user (kept here for auth context)
-
-Refresh-token cookie:
-  Name: refresh_token
-  Path: /auth   (covers /auth/refresh and /auth/logout)
-  Flags: HttpOnly, Secure, SameSite=Lax
-"""
-
 import secrets
-
 import uuid
 
 from fastapi import APIRouter, Cookie, Depends, Query, Request, Response
@@ -53,7 +35,6 @@ from app.users.schemas import UserRead
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 
-# ── State cookie helpers ──────────────────────────────────────────────────────
 
 _STATE_COOKIE = "oauth_state"
 _signer = URLSafeSerializer(settings.secret_key, salt="oauth-state")
@@ -74,17 +55,15 @@ def _verify_signed_state(signed: str, received: str) -> bool:
         raw = _signer.loads(signed)
     except BadSignature:
         return False
-    # The callback echoes back the signed value itself (GitHub reflects `state` as-is)
+
     return secrets.compare_digest(signed, received)
 
-
-# ── GitHub OAuth initiation ───────────────────────────────────────────────────
 
 @router.get(
     "/github",
     summary="Initiate GitHub OAuth",
     description="Redirects the browser to GitHub's authorization page. "
-                "Sets a signed state cookie to prevent CSRF.",
+    "Sets a signed state cookie to prevent CSRF.",
     status_code=302,
 )
 async def github_login(response: Response) -> RedirectResponse:
@@ -99,26 +78,24 @@ async def github_login(response: Response) -> RedirectResponse:
     )
 
     redirect = RedirectResponse(url=github_url, status_code=302)
-    # Store state in a short-lived HttpOnly cookie for CSRF validation
+
     redirect.set_cookie(
         key=_STATE_COOKIE,
         value=state,
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
-        max_age=600,  # 10 minutes – OAuth should complete well within this
+        max_age=600,
     )
     return redirect
 
-
-# ── GitHub OAuth callback ─────────────────────────────────────────────────────
 
 @router.get(
     "/github/callback",
     response_model=AccessTokenResponse,
     summary="GitHub OAuth callback",
     description="Exchanges the authorization code, upserts the user, "
-                "issues tokens, and sets the refresh-token cookie.",
+    "issues tokens, and sets the refresh-token cookie.",
 )
 async def github_callback(
     request: Request,
@@ -128,14 +105,12 @@ async def github_callback(
     oauth_state: str | None = Cookie(default=None, alias=_STATE_COOKIE),
     db: AsyncSession = Depends(get_db),
 ) -> AccessTokenResponse:
-    # ── CSRF: validate state ──────────────────────────────────────────────────
+
     if oauth_state is None or not _verify_signed_state(oauth_state, state):
         raise OAuthStateException()
 
-    # Clear the one-time state cookie
     response.delete_cookie(_STATE_COOKIE)
 
-    # ── Delegate to service layer ─────────────────────────────────────────────
     try:
         return await handle_github_callback(code=code, db=db, response=response)
     except ValueError as exc:
@@ -146,14 +121,12 @@ async def github_callback(
         ) from exc
 
 
-# ── Token refresh (rotation) ──────────────────────────────────────────────────
-
 @router.post(
     "/refresh",
     response_model=AccessTokenResponse,
     summary="Rotate refresh token",
     description="Reads the refresh token from the HttpOnly cookie, "
-                "validates it, revokes the old one, issues a new pair.",
+    "validates it, revokes the old one, issues a new pair.",
 )
 async def refresh_tokens(
     response: Response,
@@ -163,7 +136,6 @@ async def refresh_tokens(
     if refresh_token is None:
         raise NoCookieException()
 
-    # Decode JWT (signature + expiry)
     try:
         payload = decode_refresh_token(refresh_token)
     except ExpiredSignatureError:
@@ -182,14 +154,11 @@ async def refresh_tokens(
     except ValueError:
         raise CredentialsException()
 
-    # DB check: not revoked, not expired
     if not await is_token_valid(db, jti):
         raise TokenRevokedException()
 
-    # Revoke old token (rotation)
     await revoke_token(db, jti)
 
-    # Issue new pair
     new_access, _at_jti, _at_exp = create_access_token(user_id)
     new_refresh, rt_jti, rt_exp = create_refresh_token(user_id)
     await store_refresh_token(db, user_id, rt_jti, rt_exp)
@@ -198,8 +167,6 @@ async def refresh_tokens(
     expires_in = settings.access_token_expire_minutes * 60
     return AccessTokenResponse(access_token=new_access, expires_in=expires_in)
 
-
-# ── Logout ────────────────────────────────────────────────────────────────────
 
 @router.post(
     "/logout",
@@ -218,19 +185,17 @@ async def logout(
             jti = payload.get("jti", "")
             await revoke_token(db, jti)
         except JWTError:
-            pass  # invalid token – still clear the cookie
+            pass
 
     clear_refresh_cookie(response)
 
-
-# ── Current user (auth-scoped convenience endpoint) ───────────────────────────
 
 @router.get(
     "/me",
     response_model=UserRead,
     summary="Get authenticated user",
     description="Returns the profile of the currently authenticated user. "
-                "Requires a valid Bearer access token in the Authorization header.",
+    "Requires a valid Bearer access token in the Authorization header.",
 )
 async def get_me(current_user: User = Depends(get_current_user)) -> UserRead:
     return UserRead.model_validate(current_user)

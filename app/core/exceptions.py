@@ -1,9 +1,3 @@
-"""
-app/core/exceptions.py
-───────────────────────
-Domain-level HTTPException subclasses shared across all feature modules.
-"""
-
 from fastapi import HTTPException, status
 
 
