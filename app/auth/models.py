@@ -13,6 +13,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from app.users.models import User
+
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
@@ -41,8 +45,8 @@ class RefreshToken(Base):
     )
 
     # Relationship back to User (string ref avoids import-time cycle)
-    user: Mapped["User"] = relationship(  # noqa: F821
-        "User", back_populates="refresh_tokens"
+    user: Mapped["User"] = relationship(
+        "app.users.models.User", back_populates="refresh_tokens"
     )
 
     def __repr__(self) -> str:  # pragma: no cover

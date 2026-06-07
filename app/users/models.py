@@ -13,6 +13,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from app.auth.models import RefreshToken
+
 
 class User(Base):
     __tablename__ = "users"
@@ -35,8 +39,8 @@ class User(Base):
     )
 
     # Back-reference populated by RefreshToken.user relationship
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(  # noqa: F821
-        "RefreshToken",
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        "app.auth.models.RefreshToken",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="select",
