@@ -92,10 +92,10 @@ async def github_login(response: Response) -> RedirectResponse:
 
 @router.get(
     "/github/callback",
-    response_model=AccessTokenResponse,
     summary="GitHub OAuth callback",
     description="Exchanges the authorization code, upserts the user, "
-    "issues tokens, and sets the refresh-token cookie.",
+    "issues tokens, sets the refresh-token cookie, and redirects to the frontend.",
+    status_code=302,
 )
 async def github_callback(
     request: Request,
@@ -104,7 +104,7 @@ async def github_callback(
     state: str = Query(..., description="State param echoed back by GitHub"),
     oauth_state: str | None = Cookie(default=None, alias=_STATE_COOKIE),
     db: AsyncSession = Depends(get_db),
-) -> AccessTokenResponse:
+) -> RedirectResponse:
 
     if oauth_state is None:
         print("DEBUG: oauth_state cookie is None!")
@@ -116,7 +116,7 @@ async def github_callback(
     response.delete_cookie(_STATE_COOKIE)
 
     try:
-        return await handle_github_callback(code=code, db=db, response=response)
+        token_data = await handle_github_callback(code=code, db=db, response=response)
     except ValueError as exc:
         raise OAuthCallbackException(detail=str(exc)) from exc
     except Exception as exc:
@@ -124,6 +124,15 @@ async def github_callback(
         raise OAuthCallbackException(
             detail="Unexpected error during GitHub OAuth callback"
         ) from exc
+
+    frontend_callback_url = (
+        f"{settings.frontend_url}/auth/callback"
+        f"?access_token={token_data.access_token}"
+        f"&expires_in={token_data.expires_in}"
+    )
+    redirect = RedirectResponse(url=frontend_callback_url, status_code=302)
+    redirect.headers.update(response.headers)
+    return redirect
 
 
 @router.post(
