@@ -15,6 +15,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    google_api_key: str = ""
+
     github_client_id: str = "changeme"
     github_client_secret: str = "changeme"
     github_redirect_uri: str = "http://localhost:8000/auth/github/callback"

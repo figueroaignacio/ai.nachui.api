@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # ── Import all models so Alembic can see them for autogenerate ────────────────
 import app.auth.models  # noqa: F401
+import app.chats.models  # noqa: F401
 import app.users.models  # noqa: F401
 from app.core.config import get_settings
 from app.core.database import Base

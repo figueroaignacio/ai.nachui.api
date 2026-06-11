@@ -4,8 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.auth.models  # noqa: F401
+import app.chats.models  # noqa: F401
 import app.users.models  # noqa: F401
 from app.auth.router import router as auth_router
+from app.chats.router import router as chats_router
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.users.router import router as users_router
@@ -39,12 +41,13 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
     app.include_router(auth_router)
     app.include_router(users_router)
+    app.include_router(chats_router)
 
     @app.get("/health", tags=["health"], summary="Health check")
     async def health() -> dict:
