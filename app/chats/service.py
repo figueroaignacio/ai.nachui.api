@@ -12,22 +12,17 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chats.models import Chat, Message, MessageRole
-from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
+from app.rag.llm import get_llm
+from app.rag.prompts import _SYSTEM_PROMPT
+from app.rag.tools import async_execute_tool, tools
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
-
-_SYSTEM_PROMPT = (
-    "You are NachAI, a helpful and concise AI assistant embedded in a developer tool. "
-    "Answer clearly and precisely."
-)
 
 
 async def create_chat(db: AsyncSession, user_id: uuid.UUID) -> Chat:
@@ -139,29 +134,58 @@ async def stream_assistant_response(
 
     lc_messages = _build_lc_messages(prior_history, user_content)
 
-    # 4. Stream from Gemini (no connection held during network IO to Gemini)
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=settings.google_api_key,
-        streaming=True,
-    )
+    # 4. Run tool execution agent loop
+    llm = get_llm()
+    llm_with_tools = llm.bind_tools(tools)
 
     assistant_content_parts: list[str] = []
+    max_iterations = 5
 
-    try:
-        async for chunk in llm.astream(lc_messages):
-            text = chunk.content if isinstance(chunk.content, str) else ""
-            if text:
-                assistant_content_parts.append(text)
-                payload = json.dumps({"content": text, "done": False})
-                yield f"data: {payload}\n\n"
-    except Exception:
-        logger.exception("Gemini streaming error for chat %s", chat_id)
-        error_payload = json.dumps(
-            {"content": "Error generating response.", "done": True}
-        )
-        yield f"data: {error_payload}\n\n"
-        return
+    for iteration in range(max_iterations):
+        try:
+            response = await llm_with_tools.ainvoke(lc_messages)
+
+            # If the model requests a tool call, run it and append responses to conversation history
+            if response.tool_calls:
+                lc_messages.append(response)
+                for tool_call in response.tool_calls:
+                    t_name = tool_call["name"]
+                    t_args = tool_call["args"]
+                    t_id = tool_call["id"]
+
+                    # Send a progress indicator chunk to frontend
+                    status_msg = f"\n*[Calling tool '{t_name}' with args {json.dumps(t_args)}...]*\n"
+                    yield f"data: {json.dumps({'content': status_msg, 'done': False})}\n\n"
+
+                    # Execute tool
+                    tool_output = await async_execute_tool(t_name, t_args)
+
+                    # Append ToolMessage
+                    lc_messages.append(
+                        ToolMessage(content=tool_output, tool_call_id=t_id)
+                    )
+                continue
+
+            # If there are no tool calls left, stream the final response to the user
+            async for chunk in llm.astream(lc_messages):
+                text = chunk.content if isinstance(chunk.content, str) else ""
+                if text:
+                    assistant_content_parts.append(text)
+                    payload = json.dumps({"content": text, "done": False})
+                    yield f"data: {payload}\n\n"
+            break
+
+        except Exception:
+            logger.exception(
+                "Gemini streaming error during iteration %d for chat %s",
+                iteration,
+                chat_id,
+            )
+            error_payload = json.dumps(
+                {"content": "Error generating response.", "done": True}
+            )
+            yield f"data: {error_payload}\n\n"
+            return
 
     # 5. Persist the full assistant message
     full_response = "".join(assistant_content_parts)
