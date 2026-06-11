@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     )
 
     google_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash"
 
     github_client_id: str = "changeme"
     github_client_secret: str = "changeme"

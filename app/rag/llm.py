@@ -6,7 +6,7 @@ settings = get_settings()
 def get_llm(streaming: bool = True) -> ChatGoogleGenerativeAI:
     """Initialize and return the Gemini Chat LLM."""
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=settings.gemini_model,
         google_api_key=settings.google_api_key,
         streaming=streaming,
     )

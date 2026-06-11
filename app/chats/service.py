@@ -7,6 +7,7 @@ Handles:
 - LangChain / Gemini streaming integration
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -97,6 +98,66 @@ def _build_lc_messages(
     return lc_messages
 
 
+def _extract_text_content(content) -> str:
+    """Extract string content from LangChain message content (which can be str or list of dicts)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict):
+                if part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+            elif hasattr(part, "get"):
+                if part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+        return "".join(text_parts)
+    return str(content) if content else ""
+
+
+def _check_needs_tools(messages: list) -> bool:
+    """
+    Decide if we should bind tools to the LLM.
+    We bind tools if:
+    1. The conversation already contains tool calls or tool responses (to preserve flow).
+    2. The user's last message mentions coding, UI generation, registry, or specific UI component keywords.
+    """
+    # 1. Check if history has any tool calls or tool messages
+    for msg in messages:
+        if isinstance(msg, ToolMessage):
+            return True
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            return True
+
+    # 2. Check the last user message
+    last_user_msg = ""
+    for msg in reversed(messages):
+        if msg.__class__.__name__ == "HumanMessage" or getattr(msg, "type", None) == "human":
+            last_user_msg = msg.content
+            break
+
+    if not last_user_msg:
+        return False
+
+    # Convert to lowercase for matching
+    text = last_user_msg.lower()
+
+    # Keywords indicating UI generation, code, components, registry, etc.
+    ui_keywords = [
+        "component", "registry", "button", "accordion", "badge", "input",
+        "card", "modal", "dialog", "menu", "list", "table", "navbar",
+        "create", "build", "generate", "code", "tsx", "react", "ui", "page",
+        "crear", "hacer", "generar", "codigo", "código", "pantalla", "diseñar",
+        "diseño", "componente", "registro", "documentacion", "docs", "detalles",
+        "details", "show", "get", "ver", "registry", "registry_components",
+        "tab", "slider", "form", "select", "checkbox", "switch", "avatar"
+    ]
+
+    return any(keyword in text for keyword in ui_keywords)
+
+
 async def stream_assistant_response(
     chat_id: uuid.UUID,
     user_content: str,
@@ -136,7 +197,11 @@ async def stream_assistant_response(
 
     # 4. Run tool execution agent loop
     llm = get_llm()
-    llm_with_tools = llm.bind_tools(tools)
+    # Bind tools only when the query or context needs them (UI generation, component lookup, etc.)
+    if _check_needs_tools(lc_messages):
+        llm_with_tools = llm.bind_tools(tools)
+    else:
+        llm_with_tools = llm
 
     assistant_content_parts: list[str] = []
     max_iterations = 5
@@ -166,13 +231,19 @@ async def stream_assistant_response(
                     )
                 continue
 
-            # If there are no tool calls left, stream the final response to the user
-            async for chunk in llm.astream(lc_messages):
-                text = chunk.content if isinstance(chunk.content, str) else ""
-                if text:
-                    assistant_content_parts.append(text)
-                    payload = json.dumps({"content": text, "done": False})
+            # If there are no tool calls left, we already have the full response content from ainvoke!
+            # Stream the generated content in chunks to the client to simulate a typewriter effect
+            # and avoid a second slow and redundant LLM API request.
+            text = _extract_text_content(response.content)
+            if text:
+                words = text.split(" ")
+                for i, word in enumerate(words):
+                    chunk_text = (word + " ") if i < len(words) - 1 else word
+                    assistant_content_parts.append(chunk_text)
+                    payload = json.dumps({"content": chunk_text, "done": False})
                     yield f"data: {payload}\n\n"
+                    # Small sleep to make it feel smooth and like streaming
+                    await asyncio.sleep(0.005)
             break
 
         except Exception:

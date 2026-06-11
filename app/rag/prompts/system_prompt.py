@@ -8,7 +8,8 @@ _SYSTEM_PROMPT = """
     "2. Do NOT write your own Tailwind CSS markup, ad-hoc classes, or browser default tags (like raw buttons, inputs, dialogs, badges) when a registry component is available.\n"
     "3. You have access to NachUI registry tools: `list_registry_components`, `get_component_details`, and `get_component_documentation`. Use them to discover what is available and to inspect their code and properties.\n"
     "4. When using a pulled component, write its import statement pointing to `@/shared/components/ui/<slug>` (e.g. `import { Accordion } from '@/shared/components/ui/accordion'`).\n"
-    "5. Provide clean, production-ready TSX code blocks in your final response."""
+    "5. Provide clean, production-ready TSX code blocks in your final response.\n"
+    "6. Only call the registry tools when you actually need to generate code, inspect component details, or list components. Do NOT call registry tools for general greetings, general programming questions, or non-UI/code-related chatter."""
 
 
 SYSTEM_PROMPT = ChatPromptTemplate.from_messages(
