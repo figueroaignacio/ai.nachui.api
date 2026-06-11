@@ -197,18 +197,20 @@ async def stream_assistant_response(
 
     # 4. Run tool execution agent loop
     llm = get_llm()
-    # Bind tools only when the query or context needs them (UI generation, component lookup, etc.)
-    if _check_needs_tools(lc_messages):
-        llm_with_tools = llm.bind_tools(tools)
-    else:
-        llm_with_tools = llm
 
     assistant_content_parts: list[str] = []
     max_iterations = 5
 
     for iteration in range(max_iterations):
         try:
-            response = await llm_with_tools.ainvoke(lc_messages)
+            # Re-evaluate whether tools are needed each iteration.
+            # After a tool call, lc_messages will contain ToolMessages so we always re-bind.
+            if _check_needs_tools(lc_messages):
+                llm_active = llm.bind_tools(tools)
+            else:
+                llm_active = llm
+
+            response = await llm_active.ainvoke(lc_messages)
 
             # If the model requests a tool call, run it and append responses to conversation history
             if response.tool_calls:
@@ -235,6 +237,12 @@ async def stream_assistant_response(
             # Stream the generated content in chunks to the client to simulate a typewriter effect
             # and avoid a second slow and redundant LLM API request.
             text = _extract_text_content(response.content)
+            logger.debug(
+                "Response content type=%s, text length=%d for chat %s",
+                type(response.content).__name__,
+                len(text),
+                chat_id,
+            )
             if text:
                 words = text.split(" ")
                 for i, word in enumerate(words):
@@ -242,8 +250,14 @@ async def stream_assistant_response(
                     assistant_content_parts.append(chunk_text)
                     payload = json.dumps({"content": chunk_text, "done": False})
                     yield f"data: {payload}\n\n"
-                    # Small sleep to make it feel smooth and like streaming
                     await asyncio.sleep(0.005)
+            else:
+                logger.warning(
+                    "Empty response content at iteration %d for chat %s. raw content: %r",
+                    iteration,
+                    chat_id,
+                    response.content,
+                )
             break
 
         except Exception:
