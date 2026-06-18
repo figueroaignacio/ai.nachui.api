@@ -13,6 +13,8 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 
+from google.genai.errors import ServerError
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -260,6 +262,32 @@ async def stream_assistant_response(
                 )
             break
 
+        except ServerError as exc:
+            if exc.status == 503:
+                logger.warning(
+                    "Gemini 503 (overloaded) at iteration %d for chat %s: %s",
+                    iteration,
+                    chat_id,
+                    exc,
+                )
+                error_payload = json.dumps(
+                    {
+                        "content": "The AI model is currently experiencing high demand. Please try again in a moment.",
+                        "error": True,
+                        "done": True,
+                    }
+                )
+            else:
+                logger.exception(
+                    "Gemini ServerError at iteration %d for chat %s",
+                    iteration,
+                    chat_id,
+                )
+                error_payload = json.dumps(
+                    {"content": "Error generating response.", "error": True, "done": True}
+                )
+            yield f"data: {error_payload}\n\n"
+            return
         except Exception:
             logger.exception(
                 "Gemini streaming error during iteration %d for chat %s",
@@ -267,7 +295,7 @@ async def stream_assistant_response(
                 chat_id,
             )
             error_payload = json.dumps(
-                {"content": "Error generating response.", "done": True}
+                {"content": "Error generating response.", "error": True, "done": True}
             )
             yield f"data: {error_payload}\n\n"
             return
